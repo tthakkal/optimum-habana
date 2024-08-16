@@ -471,7 +471,6 @@ class GaudiMixtralDecoderLayer(MixtralDecoderLayer):
         reuse_cache: Optional[bool] = False,
         flash_attention_recompute: Optional[bool] = False,
         cache_idx: int = None,
-        lazy_mode: Optional[bool] = True,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -481,10 +480,7 @@ class GaudiMixtralDecoderLayer(MixtralDecoderLayer):
         - add new args reuse_cache
         - add new args flash_attention_recompute
         - add new args cache_idx
-        - add new args lazy_mode
         """
-        if lazy_mode:
-            htcore.mark_step()
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -504,16 +500,12 @@ class GaudiMixtralDecoderLayer(MixtralDecoderLayer):
             cache_idx=cache_idx,
         )
         hidden_states = residual + hidden_states
-        if lazy_mode:
-            htcore.mark_step()
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states, router_logits = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
-        if lazy_mode:
-            htcore.mark_step()
 
         outputs = (hidden_states,)
 
@@ -554,7 +546,6 @@ class GaudiMixtralModel(MixtralModel):
         reuse_cache: Optional[bool] = False,
         flash_attention_recompute: Optional[bool] = False,
         cache_idx: int = None,
-        lazy_mode: Optional[bool] = True,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         """
         Copied from MixtralModel.forward: https://github.com/huggingface/transformers/blob/v4.37.0/src/transformers/models/mixtral/modeling_mixtral.py#L1069
@@ -608,7 +599,6 @@ class GaudiMixtralModel(MixtralModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
@@ -617,6 +607,8 @@ class GaudiMixtralModel(MixtralModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
+
+
 
         if self.config._attn_implementation == "flash_attention_2":
             # 2d mask is passed through the layers
@@ -678,7 +670,6 @@ class GaudiMixtralModel(MixtralModel):
                     reuse_cache=reuse_cache,
                     flash_attention_recompute=flash_attention_recompute,
                     cache_idx=cache_idx,
-                    lazy_mode=lazy_mode,
                 )
 
             hidden_states = layer_outputs[0]
@@ -753,7 +744,6 @@ class GaudiMixtralForCausalLM(MixtralForCausalLM):
         reuse_cache: Optional[bool] = None,
         flash_attention_recompute: Optional[bool] = False,
         cache_idx: int = None,
-        lazy_mode: Optional[bool] = True,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -782,7 +772,6 @@ class GaudiMixtralForCausalLM(MixtralForCausalLM):
             reuse_cache=reuse_cache,
             flash_attention_recompute=flash_attention_recompute,
             cache_idx=cache_idx,
-            lazy_mode=lazy_mode,
         )
 
         hidden_states = outputs[0]
@@ -887,7 +876,6 @@ class GaudiMixtralForCausalLM(MixtralForCausalLM):
                 "reuse_cache": reuse_cache,
                 "flash_attention_recompute": kwargs.get("flash_attention_recompute"),
                 "cache_idx": kwargs.get("cache_idx"),
-                "lazy_mode": kwargs.get("lazy_mode"),
             }
         )
         return model_inputs
